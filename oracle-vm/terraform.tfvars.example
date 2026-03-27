@@ -1,0 +1,20 @@
+tenancy_ocid     = "ocid1.tenancy.oc1..example"
+user_ocid        = "ocid1.user.oc1..example"
+fingerprint      = "aa:bb:cc:dd:ee:ff:11:22:33:44:55:66:77:88:99:00"
+private_key_path = "~/.oci/oci_api_key.pem"
+region           = "us-ashburn-1"
+
+compartment_ocid = "ocid1.compartment.oc1..example"
+image_ocid       = "ocid1.image.oc1.iad.example"
+
+# Contents of your SSH public key file
+ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... yourname@host"
+
+# Optional (defaults shown)
+instance_name      = "always-free-vm"
+instance_shape     = "VM.Standard.E2.1.Micro"
+vcn_cidr_block     = "10.0.0.0/16"
+subnet_cidr_block  = "10.0.0.0/24"
+network_name_prefix = "always-free-vm"
+ssh_ingress_cidr   = "0.0.0.0/0"
+assign_public_ip   = true

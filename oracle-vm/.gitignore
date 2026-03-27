@@ -1,0 +1,6 @@
+# Sensitive files live in private/ (separate private repo)
+private/*
+!private/_empty
+
+# Terraform working directory
+.terraform/
