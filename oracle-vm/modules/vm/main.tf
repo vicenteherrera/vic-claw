@@ -12,6 +12,14 @@ resource "oci_core_instance" "this" {
   display_name        = var.instance_name
   shape               = var.instance_shape
 
+  dynamic "shape_config" {
+    for_each = var.instance_ocpus != null ? [1] : []
+    content {
+      ocpus         = var.instance_ocpus
+      memory_in_gbs = var.instance_memory_in_gbs
+    }
+  }
+
   create_vnic_details {
     subnet_id        = var.subnet_id
     assign_public_ip = var.assign_public_ip

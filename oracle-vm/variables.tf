@@ -81,7 +81,19 @@ variable "instance_name" {
 }
 
 variable "instance_shape" {
-  description = "Always Free compatible shape"
+  description = "Always Free compatible shape (VM.Standard.E2.1.Micro for AMD, VM.Standard.A1.Flex for ARM)"
   type        = string
   default     = "VM.Standard.E2.1.Micro"
+}
+
+variable "instance_ocpus" {
+  description = "Number of OCPUs (required for Flex shapes like A1.Flex, null for fixed shapes)"
+  type        = number
+  default     = null
+}
+
+variable "instance_memory_in_gbs" {
+  description = "Memory in GBs (required for Flex shapes like A1.Flex, null for fixed shapes)"
+  type        = number
+  default     = null
 }

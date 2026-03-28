@@ -34,7 +34,10 @@ destroy-vm:
 .PHONY: public-ip
 # Print the SSH command to connect to the VM
 public-ip:
+	@echo "For Oracle Linux VM / RHEL VM:"
 	@echo "ssh opc@$$($(TF) output -raw public_ip)"
+	@echo "For Ubuntu / Debian VM:"
+	@echo "ssh ubuntu@$$($(TF) output -raw public_ip)"
 
 .PHONY: validate-oci-login
 # Verify that OCI CLI is installed and credentials are valid
@@ -84,6 +87,7 @@ print-account-tfvars:
 # List available Ubuntu/Oracle Linux image OCIDs for the region
 get-image-ocid:
 	@command -v $(OCI) >/dev/null 2>&1 || { echo "Error: oci-cli not found in PATH"; exit 1; }
+	@[ -f $(TFVARS) ] || { echo "Error: tfvars file not found at $(TFVARS)"; exit 1; }
 	@COMPARTMENT_OCID=$$(grep -E "^compartment_ocid" $(TFVARS) | sed 's/.*"\([^"]*\)".*/\1/' | head -1); \
 	REGION=$$(grep -E "^region" $(TFVARS) | sed 's/.*"\([^"]*\)".*/\1/' | head -1); \
 	if [ -z "$$COMPARTMENT_OCID" ] || [ -z "$$REGION" ]; then \
@@ -91,4 +95,18 @@ get-image-ocid:
 		exit 1; \
 	fi; \
 	echo "Fetching available images for region: $$REGION"; \
-	$(OCI) compute image list --compartment-id "$$COMPARTMENT_OCID" --region "$$REGION" --query 'data[?"operating-system"==`Canonical Ubuntu` || "operating-system"==`Oracle Linux`].{id:id, os:"operating-system", version:"operating-system-version"}' --all --profile $(OCI_PROFILE) | head -20
+	echo "=== aarch64 (ARM) images — for VM.Standard.A1.Flex ==="; \
+	$(OCI) compute image list --compartment-id "$$COMPARTMENT_OCID" --region "$$REGION" \
+	  --query 'data[?("operating-system"==`Canonical Ubuntu` || "operating-system"==`Oracle Linux`) && contains("display-name",`aarch64`)].{id:id, os:"operating-system", version:"operating-system-version", name:"display-name"}' \
+	  --all --profile $(OCI_PROFILE); \
+	echo ""; \
+	echo "=== x86_64 (AMD) images — for VM.Standard.E2.1.Micro ==="; \
+	$(OCI) compute image list --compartment-id "$$COMPARTMENT_OCID" --region "$$REGION" \
+	  --query 'data[?("operating-system"==`Canonical Ubuntu` || "operating-system"==`Oracle Linux`) && !contains("display-name",`aarch64`)].{id:id, os:"operating-system", version:"operating-system-version", name:"display-name"}' \
+	  --all --profile $(OCI_PROFILE)
+
+.PHONY: get-regions-europe
+# List subscribed OCI regionsmake
+get-regions:
+	@command -v $(OCI) >/dev/null 2>&1 || { echo "Error: oci-cli not found in PATH"; exit 1; }
+	@$(OCI) iam region-subscription list --profile $(OCI_PROFILE) --query 'data[].{"region-name":"region-name", status:status}'

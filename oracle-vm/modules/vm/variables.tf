@@ -37,3 +37,15 @@ variable "image_ocid" {
   description = "Boot image OCID compatible with region and shape"
   type        = string
 }
+
+variable "instance_ocpus" {
+  description = "Number of OCPUs (required for Flex shapes, null for fixed shapes)"
+  type        = number
+  default     = null
+}
+
+variable "instance_memory_in_gbs" {
+  description = "Memory in GBs (required for Flex shapes, null for fixed shapes)"
+  type        = number
+  default     = null
+}
