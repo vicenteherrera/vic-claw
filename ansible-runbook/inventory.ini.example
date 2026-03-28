@@ -1,0 +1,6 @@
+[ubuntu]
+# Replace with your VM public IP or DNS name
+oracle-vm ansible_host=203.0.113.10 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/id_ed25519
+
+[ubuntu:vars]
+ansible_python_interpreter=/usr/bin/python3

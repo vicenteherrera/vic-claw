@@ -1,0 +1,31 @@
+---
+- name: Install Podman on Debian / Ubuntu
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    enable_podman_socket: false
+
+  pre_tasks:
+    - name: Ensure the target is Debian or Ubuntu
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['os_family'] == 'Debian'
+        fail_msg: >-
+          This playbook supports Debian/Ubuntu only.
+          Detected {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}.
+
+  tasks:
+    - name: Install Podman
+      ansible.builtin.apt:
+        name: podman
+        state: present
+        update_cache: true
+
+    - name: Enable and start Podman API socket (optional)
+      ansible.builtin.systemd:
+        name: podman.socket
+        enabled: true
+        state: started
+      when: enable_podman_socket | bool

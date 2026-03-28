@@ -1,0 +1,31 @@
+---
+- name: Install Podman on Oracle Linux (RHEL 9.x compatible)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    enable_podman_socket: false
+
+  pre_tasks:
+    - name: Ensure the target is Oracle Linux or RHEL
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['distribution'] in ['OracleLinux', 'RedHat']
+          - ansible_facts['distribution_major_version'] == '9'
+        fail_msg: >-
+          This playbook supports Oracle Linux/RHEL 9.x only.
+          Detected {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}.
+
+  tasks:
+    - name: Install Podman
+      ansible.builtin.dnf:
+        name: podman
+        state: present
+
+    - name: Enable and start Podman API socket (optional)
+      ansible.builtin.systemd:
+        name: podman.socket
+        enabled: true
+        state: started
+      when: enable_podman_socket | bool
