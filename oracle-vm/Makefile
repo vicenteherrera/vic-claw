@@ -1,3 +1,20 @@
+# Retry create-vm every 10 minutes until it succeeds, printing retry count and elapsed time
+.PHONY: retry-create-vm
+retry-create-vm:
+	@retries=0; start_time=$$(date +%s); \
+	while true; do \
+	  echo "[Attempt $$((retries+1))] Starting create-vm at $$(date)"; \
+	  if $(MAKE) create-vm; then \
+	    elapsed=$$(( $$(date +%s) - start_time )); \
+	    echo "SUCCESS after $$((retries+1)) attempt(s), elapsed: $$((elapsed/60))m $$((elapsed%60))s"; \
+	    break; \
+	  else \
+	    elapsed=$$(( $$(date +%s) - start_time )); \
+	    echo "[Attempt $$((retries+1)) FAILED] Elapsed: $$((elapsed/60))m $$((elapsed%60))s. Retrying in 5 minutes..."; \
+	    retries=$$((retries+1)); \
+	    sleep 300; \
+	  fi; \
+	done
 TF ?= terraform
 TFVARS ?= private/terraform.tfvars
 OCI ?= oci
@@ -29,15 +46,17 @@ create-vm:
 # Tear down all Terraform-managed infrastructure
 destroy-vm:
 	$(TF) init
-	$(TF) destroy -var-file=$(TFVARS) -auto-approve
+	$(TF) destroy -var-file=$(TFVARS)
 
 .PHONY: public-ip
-# Print the SSH command to connect to the VM
+# Get the public IP address of the VM from Terraform output
 public-ip:
-	@echo "For Oracle Linux VM / RHEL VM:"
+	@echo "$$($(TF) output -raw public_ip)"
+
+.PHONY: ssh-command
+# Print the SSH command to connect to the VM
+ssh-command:
 	@echo "ssh opc@$$($(TF) output -raw public_ip)"
-	@echo "For Ubuntu / Debian VM:"
-	@echo "ssh ubuntu@$$($(TF) output -raw public_ip)"
 
 .PHONY: validate-oci-login
 # Verify that OCI CLI is installed and credentials are valid
@@ -105,7 +124,7 @@ get-image-ocid:
 	  --query 'data[?("operating-system"==`Canonical Ubuntu` || "operating-system"==`Oracle Linux`) && !contains("display-name",`aarch64`)].{id:id, os:"operating-system", version:"operating-system-version", name:"display-name"}' \
 	  --all --profile $(OCI_PROFILE)
 
-.PHONY: get-regions-europe
+.PHONY: get-regions
 # List subscribed OCI regionsmake
 get-regions:
 	@command -v $(OCI) >/dev/null 2>&1 || { echo "Error: oci-cli not found in PATH"; exit 1; }
