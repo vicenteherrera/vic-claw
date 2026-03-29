@@ -1,20 +1,3 @@
-# Retry create-vm every 10 minutes until it succeeds, printing retry count and elapsed time
-.PHONY: retry-create-vm
-retry-create-vm:
-	@retries=0; start_time=$$(date +%s); \
-	while true; do \
-	  echo "[Attempt $$((retries+1))] Starting create-vm at $$(date)"; \
-	  if $(MAKE) create-vm; then \
-	    elapsed=$$(( $$(date +%s) - start_time )); \
-	    echo "SUCCESS after $$((retries+1)) attempt(s), elapsed: $$((elapsed/60))m $$((elapsed%60))s"; \
-	    break; \
-	  else \
-	    elapsed=$$(( $$(date +%s) - start_time )); \
-	    echo "[Attempt $$((retries+1)) FAILED] Elapsed: $$((elapsed/60))m $$((elapsed%60))s. Retrying in 5 minutes..."; \
-	    retries=$$((retries+1)); \
-	    sleep 300; \
-	  fi; \
-	done
 TF ?= terraform
 TFVARS ?= private/terraform.tfvars
 OCI ?= oci
@@ -46,16 +29,11 @@ create-vm:
 # Tear down all Terraform-managed infrastructure
 destroy-vm:
 	$(TF) init
-	$(TF) destroy -var-file=$(TFVARS)
+	$(TF) destroy -var-file=$(TFVARS) -auto-approve
 
 .PHONY: public-ip
-# Get the public IP address of the VM from Terraform output
-public-ip:
-	@echo "$$($(TF) output -raw public_ip)"
-
-.PHONY: ssh-command
 # Print the SSH command to connect to the VM
-ssh-command:
+public-ip:
 	@echo "ssh opc@$$($(TF) output -raw public_ip)"
 
 .PHONY: validate-oci-login
@@ -106,7 +84,6 @@ print-account-tfvars:
 # List available Ubuntu/Oracle Linux image OCIDs for the region
 get-image-ocid:
 	@command -v $(OCI) >/dev/null 2>&1 || { echo "Error: oci-cli not found in PATH"; exit 1; }
-	@[ -f $(TFVARS) ] || { echo "Error: tfvars file not found at $(TFVARS)"; exit 1; }
 	@COMPARTMENT_OCID=$$(grep -E "^compartment_ocid" $(TFVARS) | sed 's/.*"\([^"]*\)".*/\1/' | head -1); \
 	REGION=$$(grep -E "^region" $(TFVARS) | sed 's/.*"\([^"]*\)".*/\1/' | head -1); \
 	if [ -z "$$COMPARTMENT_OCID" ] || [ -z "$$REGION" ]; then \
@@ -114,18 +91,4 @@ get-image-ocid:
 		exit 1; \
 	fi; \
 	echo "Fetching available images for region: $$REGION"; \
-	echo "=== aarch64 (ARM) images — for VM.Standard.A1.Flex ==="; \
-	$(OCI) compute image list --compartment-id "$$COMPARTMENT_OCID" --region "$$REGION" \
-	  --query 'data[?("operating-system"==`Canonical Ubuntu` || "operating-system"==`Oracle Linux`) && contains("display-name",`aarch64`)].{id:id, os:"operating-system", version:"operating-system-version", name:"display-name"}' \
-	  --all --profile $(OCI_PROFILE); \
-	echo ""; \
-	echo "=== x86_64 (AMD) images — for VM.Standard.E2.1.Micro ==="; \
-	$(OCI) compute image list --compartment-id "$$COMPARTMENT_OCID" --region "$$REGION" \
-	  --query 'data[?("operating-system"==`Canonical Ubuntu` || "operating-system"==`Oracle Linux`) && !contains("display-name",`aarch64`)].{id:id, os:"operating-system", version:"operating-system-version", name:"display-name"}' \
-	  --all --profile $(OCI_PROFILE)
-
-.PHONY: get-regions
-# List subscribed OCI regionsmake
-get-regions:
-	@command -v $(OCI) >/dev/null 2>&1 || { echo "Error: oci-cli not found in PATH"; exit 1; }
-	@$(OCI) iam region-subscription list --profile $(OCI_PROFILE) --query 'data[].{"region-name":"region-name", status:status}'
+	$(OCI) compute image list --compartment-id "$$COMPARTMENT_OCID" --region "$$REGION" --query 'data[?"operating-system"==`Canonical Ubuntu` || "operating-system"==`Oracle Linux`].{id:id, os:"operating-system", version:"operating-system-version"}' --all --profile $(OCI_PROFILE) | head -20
