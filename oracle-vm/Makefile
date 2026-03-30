@@ -1,3 +1,24 @@
+.PHONY: all
+all: help
+
+# Retry create-vm every 10 minutes until it succeeds, printing retry count and elapsed time
+.PHONY: retry-create-vm
+retry-create-vm:
+	@retries=0; start_time=$$(date +%s); \
+	while true; do \
+	  echo "[Attempt $$((retries+1))] Starting create-vm at $$(date)"; \
+	  if $(MAKE) create-vm; then \
+	    elapsed=$$(( $$(date +%s) - start_time )); \
+	    echo "SUCCESS after $$((retries+1)) attempt(s), elapsed: $$((elapsed/60))m $$((elapsed%60))s"; \
+	    break; \
+	  else \
+	    elapsed=$$(( $$(date +%s) - start_time )); \
+	    echo "[Attempt $$((retries+1)) FAILED] Elapsed: $$((elapsed/60))m $$((elapsed%60))s. Retrying in 5 minutes..."; \
+	    retries=$$((retries+1)); \
+	    sleep 300; \
+	  fi; \
+	done
+
 TF ?= terraform
 TFVARS ?= private/terraform.tfvars
 OCI ?= oci
@@ -92,3 +113,16 @@ get-image-ocid:
 	fi; \
 	echo "Fetching available images for region: $$REGION"; \
 	$(OCI) compute image list --compartment-id "$$COMPARTMENT_OCID" --region "$$REGION" --query 'data[?"operating-system"==`Canonical Ubuntu` || "operating-system"==`Oracle Linux`].{id:id, os:"operating-system", version:"operating-system-version"}' --all --profile $(OCI_PROFILE) | head -20
+
+.PHONY: list-shapes
+# List available compute shapes in the region (use to find x86 shapes; ARM shapes often start with 'VM.Standard.A1')
+list-shapes:
+	@command -v $(OCI) >/dev/null 2>&1 || { echo "Error: oci-cli not found in PATH"; exit 1; }
+	@COMPARTMENT_OCID=$$(grep -E "^compartment_ocid" $(TFVARS) | sed 's/.*"\([^\"]*\)".*/\1/' | head -1); \
+	REGION=$$(grep -E "^region" $(TFVARS) | sed 's/.*"\([^\"]*\)".*/\1/' | head -1); \
+	if [ -z "$$COMPARTMENT_OCID" ] || [ -z "$$REGION" ]; then \
+		echo "Error: Could not extract compartment_ocid or region from $(TFVARS)"; \
+		exit 1; \
+	fi; \
+	echo "Fetching available shapes for region: $$REGION"; \
+	$(OCI) compute shape list --compartment-id "$$COMPARTMENT_OCID" --region "$$REGION" --all --profile $(OCI_PROFILE) | head -200
