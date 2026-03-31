@@ -1,0 +1,45 @@
+---
+- name: Ensure Python3, pip, pipx, git, sudo, and systemd --user lingering are installed
+  hosts: all
+  become: yes
+  tasks:
+    - name: Ensure sudo is installed
+      ansible.builtin.package:
+        name: sudo
+        state: present
+
+    - name: Ensure Python3 is installed
+      ansible.builtin.package:
+        name: python3
+        state: present
+
+    - name: Ensure pip is installed
+      ansible.builtin.package:
+        name: python3-pip
+        state: present
+      when: ansible_facts.packages['python3'] is defined
+
+    # - name: Install pipx and dependencies
+    #   become: true
+    #   ansible.builtin.package:
+    #     name:
+    #       - pipx
+    #       - python3-venv  # Required by pipx to create environments
+    #     state: present
+
+    # - name: Ensure pipx is in the user PATH
+    #   ansible.builtin.command:
+    #     cmd: pipx ensurepath
+    #   changed_when: false
+
+    - name: Ensure git is installed
+      ansible.builtin.package:
+        name: git
+        state: present
+
+    - name: Enable systemd --user lingering for users
+      ansible.builtin.command: loginctl enable-linger {{ ansible_user | default(ansible_ssh_user) }}
+      become: true
+      changed_when: false
+      when: ansible_user is defined or ansible_ssh_user is defined
+

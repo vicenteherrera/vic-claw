@@ -1,0 +1,25 @@
+
+- name: Install openclaw CLI
+  hosts: all
+  become: false
+  tasks:
+    - name: Install openclaw CLI using official script
+      ansible.builtin.shell: |
+        curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install-cli.sh | bash
+      args:
+        executable: /bin/bash
+
+    - name: Ensure ~/.openclaw/bin is in user's PATH
+      ansible.builtin.lineinfile:
+        path: ~/.bashrc
+        line: 'export PATH="$HOME/.openclaw/bin:$PATH"'
+        insertafter: EOF
+        state: present
+      become: false
+
+    - name: Create symlink ~/.openclaw/bin/claw -> ~/.openclaw/bin/openclaw
+      ansible.builtin.file:
+        src: ~/.openclaw/bin/openclaw
+        dest: ~/.openclaw/bin/claw
+        state: link
+      become: false
