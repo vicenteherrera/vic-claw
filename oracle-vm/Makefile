@@ -19,9 +19,9 @@ retry-create-vm:
 	  fi; \
 	done
 
-TF ?= terraform
+ 
 TFVARS ?= private/terraform.tfvars
-OCI ?= oci
+ 
 OCI_PROFILE ?= DEFAULT
 
 .PHONY: help
@@ -32,42 +32,47 @@ help:
 .PHONY: update-providers
 # Upgrade Terraform providers to latest compatible versions
 update-providers:
-	$(TF) init -upgrade
+	terraform init -upgrade
 
 .PHONY: plan-vm
 # Preview infrastructure changes without applying them
 plan-vm:
-	$(TF) init
-	$(TF) plan -var-file=$(TFVARS)
+	terraform init
+	terraform plan -var-file=$(TFVARS)
 
 .PHONY: create-vm
 # Create or update the VM and all associated resources
 create-vm:
-	$(TF) init
-	$(TF) apply -var-file=$(TFVARS) -auto-approve
+	terraform init
+	terraform apply -var-file=$(TFVARS) -auto-approve
 
 .PHONY: destroy-vm
 # Tear down all Terraform-managed infrastructure
 destroy-vm:
-	$(TF) init
-	$(TF) destroy -var-file=$(TFVARS) -auto-approve
+	terraform init
+	terraform destroy -var-file=$(TFVARS) -auto-approve
 
 .PHONY: public-ip
 # Print the SSH command to connect to the VM
 public-ip:
-	@echo "ssh opc@$$($(TF) output -raw public_ip)"
+	@echo "ssh opc@$$(terraform output -raw public_ip)"
+
+.PHONY: ssh-vm
+# SSH into the VM
+ssh-vm:
+	ssh ubuntu@$$(terraform output -raw public_ip)
 
 .PHONY: validate-oci-login
 # Verify that OCI CLI is installed and credentials are valid
 validate-oci-login:
-	@command -v $(OCI) >/dev/null 2>&1 || { echo "Error: oci-cli not found in PATH"; exit 1; }
+	@command -v oci >/dev/null 2>&1 || { echo "Error: oci-cli not found in PATH"; exit 1; }
 	@echo "Validating OCI CLI credentials with profile: $(OCI_PROFILE)"
-	@$(OCI) iam user get --user-id $$($(OCI) iam user list --profile $(OCI_PROFILE) --query 'data[0].id' --raw-output --profile $(OCI_PROFILE)) --profile $(OCI_PROFILE) >/dev/null 2>&1 && echo "✓ OCI CLI login successful" || { echo "✗ OCI CLI login failed"; exit 1; }
+	oci iam user get --user-id $$(oci iam user list --profile $(OCI_PROFILE) --query 'data[0].id' --raw-output --profile $(OCI_PROFILE)) --profile $(OCI_PROFILE) >/dev/null 2>&1 && echo "✓ OCI CLI login successful" || { echo "✗ OCI CLI login failed"; exit 1; }
 
 .PHONY: print-account-tfvars
 # Extract OCI account details and print them as tfvars
 print-account-tfvars:
-	@command -v $(OCI) >/dev/null 2>&1 || { echo "Error: oci-cli not found in PATH"; exit 1; }
+	@command -v oci >/dev/null 2>&1 || { echo "Error: oci-cli not found in PATH"; exit 1; }
 	@CFG_FILE="$${OCI_CLI_CONFIG_FILE:-$$HOME/.oci/config}"; \
 	read_cfg_value() { \
 		awk -v profile="$(OCI_PROFILE)" -v key="$$1" '\
@@ -87,12 +92,12 @@ print-account-tfvars:
 			printf '<set-me>'; \
 		fi; \
 	}; \
-	TENANCY_OCID="$$($(OCI) iam availability-domain list --profile $(OCI_PROFILE) --all --query 'data[0]."compartment-id"' --raw-output 2>/dev/null || true)"; \
+	TENANCY_OCID="$$(oci iam availability-domain list --profile $(OCI_PROFILE) --all --query 'data[0]."compartment-id"' --raw-output 2>/dev/null || true)"; \
 	USER_OCID="$$(read_cfg_value user)"; \
 	FINGERPRINT="$$(read_cfg_value fingerprint)"; \
 	PRIVATE_KEY_PATH="$$(read_cfg_value key_file)"; \
 	REGION="$$(read_cfg_value region)"; \
-	COMPARTMENT_OCID="$$($(OCI) iam compartment list --profile $(OCI_PROFILE) --compartment-id "$$TENANCY_OCID" --access-level ACCESSIBLE --all --query 'data[?"lifecycle-state"==`ACTIVE` && name!=`ManagedCompartmentForPaaS`] | [0].id' --raw-output 2>/dev/null || true)"; \
+	COMPARTMENT_OCID="$$(oci iam compartment list --profile $(OCI_PROFILE) --compartment-id "$$TENANCY_OCID" --access-level ACCESSIBLE --all --query 'data[?"lifecycle-state"==`ACTIVE` && name!=`ManagedCompartmentForPaaS`] | [0].id' --raw-output 2>/dev/null || true)"; \
 	if [ -z "$$COMPARTMENT_OCID" ] || [ "$$COMPARTMENT_OCID" = "null" ]; then COMPARTMENT_OCID="$$TENANCY_OCID"; fi; \
 	printf 'tenancy_ocid     = "%s"\n' "$$(clean_or_placeholder "$$TENANCY_OCID")"; \
 	printf 'user_ocid        = "%s"\n' "$$(clean_or_placeholder "$$USER_OCID")"; \
@@ -102,9 +107,9 @@ print-account-tfvars:
 	printf 'compartment_ocid = "%s"\n' "$$(clean_or_placeholder "$$COMPARTMENT_OCID")"
 
 .PHONY: get-image-ocid
-# List available Ubuntu/Oracle Linux image OCIDs for the region
+# List the last Ubuntu images, then the last Oracle Linux images
 get-image-ocid:
-	@command -v $(OCI) >/dev/null 2>&1 || { echo "Error: oci-cli not found in PATH"; exit 1; }
+	@command -v oci >/dev/null 2>&1 || { echo "Error: oci-cli not found in PATH"; exit 1; }
 	@COMPARTMENT_OCID=$$(grep -E "^compartment_ocid" $(TFVARS) | sed 's/.*"\([^"]*\)".*/\1/' | head -1); \
 	REGION=$$(grep -E "^region" $(TFVARS) | sed 's/.*"\([^"]*\)".*/\1/' | head -1); \
 	if [ -z "$$COMPARTMENT_OCID" ] || [ -z "$$REGION" ]; then \
@@ -112,12 +117,41 @@ get-image-ocid:
 		exit 1; \
 	fi; \
 	echo "Fetching available images for region: $$REGION"; \
-	$(OCI) compute image list --compartment-id "$$COMPARTMENT_OCID" --region "$$REGION" --query 'data[?"operating-system"==`Canonical Ubuntu` || "operating-system"==`Oracle Linux`].{id:id, os:"operating-system", version:"operating-system-version"}' --all --profile $(OCI_PROFILE) | head -20
+	echo "Canonical Ubuntu (last 10):"; \
+	oci compute image list --compartment-id "$$COMPARTMENT_OCID" --region "$$REGION" --query 'sort_by(data[?"operating-system"==`Canonical Ubuntu`], &"time-created")[-10:].{id:id, os:"operating-system", version:"operating-system-version", "display-name": "display-name", "time-created": "time-created"}' --all --profile $(OCI_PROFILE); \
+	echo "Oracle Linux (last 10):"; \
+	oci compute image list --compartment-id "$$COMPARTMENT_OCID" --region "$$REGION" --query 'sort_by(data[?"operating-system"==`Oracle Linux`], &"time-created")[-10:].{id:id, os:"operating-system", version:"operating-system-version", "display-name": "display-name", "time-created": "time-created"}' --all --profile $(OCI_PROFILE)
+
+.PHONY: list-compatible-images
+# List images compatible with instance_shape (Canonical Ubuntu first, then Oracle Linux)
+list-compatible-images:
+	@command -v oci >/dev/null 2>&1 || { echo "Error: oci-cli not found in PATH"; exit 1; }
+	@IMAGE_COUNT=$${IMAGE_COUNT:-10}; \
+	COMPARTMENT_OCID=$$(grep -E "^compartment_ocid" $(TFVARS) | sed 's/.*"\([^\"]*\)".*/\1/' | head -1); \
+	REGION=$$(grep -E "^region" $(TFVARS) | sed 's/.*"\([^\"]*\)".*/\1/' | head -1); \
+	SHAPE=$$(grep -E "^instance_shape" $(TFVARS) | sed 's/.*"\([^\"]*\)".*/\1/' | head -1); \
+	if [ -z "$$COMPARTMENT_OCID" ] || [ -z "$$REGION" ] || [ -z "$$SHAPE" ]; then \
+		echo "Error: Could not extract compartment_ocid, region, or instance_shape from $(TFVARS)"; \
+		exit 1; \
+	fi; \
+	echo "Fetching images compatible with shape: $$SHAPE (region: $$REGION)"; \
+	echo "Canonical Ubuntu (latest $$IMAGE_COUNT):"; \
+	oci compute image list --compartment-id "$$COMPARTMENT_OCID" --region "$$REGION" --shape "$$SHAPE" \
+	  --operating-system "Canonical Ubuntu" \
+	  --sort-by TIMECREATED --sort-order DESC --limit $$IMAGE_COUNT \
+	  --query 'data[].{id:id,"display-name":"display-name",os:"operating-system",version:"operating-system-version"}' \
+	  --profile $(OCI_PROFILE); \
+	echo "Oracle Linux (latest $$IMAGE_COUNT):"; \
+	oci compute image list --compartment-id "$$COMPARTMENT_OCID" --region "$$REGION" --shape "$$SHAPE" \
+	  --operating-system "Oracle Linux" \
+	  --sort-by TIMECREATED --sort-order DESC --limit $$IMAGE_COUNT \
+	  --query 'data[].{id:id,"display-name":"display-name",os:"operating-system",version:"operating-system-version"}' \
+	  --profile $(OCI_PROFILE)
 
 .PHONY: list-shapes
 # List available compute shapes in the region (use to find x86 shapes; ARM shapes often start with 'VM.Standard.A1')
 list-shapes:
-	@command -v $(OCI) >/dev/null 2>&1 || { echo "Error: oci-cli not found in PATH"; exit 1; }
+    @command -v oci >/dev/null 2>&1 || { echo "Error: oci-cli not found in PATH"; exit 1; }
 	@COMPARTMENT_OCID=$$(grep -E "^compartment_ocid" $(TFVARS) | sed 's/.*"\([^\"]*\)".*/\1/' | head -1); \
 	REGION=$$(grep -E "^region" $(TFVARS) | sed 's/.*"\([^\"]*\)".*/\1/' | head -1); \
 	if [ -z "$$COMPARTMENT_OCID" ] || [ -z "$$REGION" ]; then \
@@ -125,4 +159,4 @@ list-shapes:
 		exit 1; \
 	fi; \
 	echo "Fetching available shapes for region: $$REGION"; \
-	$(OCI) compute shape list --compartment-id "$$COMPARTMENT_OCID" --region "$$REGION" --all --profile $(OCI_PROFILE) | head -200
+	oci compute shape list --compartment-id "$$COMPARTMENT_OCID" --region "$$REGION" --all --profile $(OCI_PROFILE) | head -200
